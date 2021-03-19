@@ -1,0 +1,35 @@
+{
+    "name": "flysion/laravel-database-cache",
+    "description": "Laravel database cache.",
+    "keywords": ["database", "laravel", "eloquent", "database", "database cache", "eloquent cache"],
+    "license": "MIT",
+    "authors": [
+        {
+            "name": "lixx",
+            "email": "sss60@qq.com"
+        }
+    ],
+    "require": {
+        "php": ">=7.1.0",
+        "laravel/framework": "~7.22"
+    },
+    "autoload": {
+        "psr-4": {
+            "Flysion\\Database\\": "src/"
+        },
+        "files": []
+    },
+    "require-dev": {
+
+    },
+    "extra": {
+        "laravel": {
+            "providers": [
+                "Flysion\\Database\\ServiceProvider"
+            ],
+            "aliases": {
+
+            }
+        }
+    }
+}
