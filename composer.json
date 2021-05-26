@@ -18,7 +18,7 @@
             "Flysion\\Database\\": "src/"
         },
         "files": [
-            "src/helpers.php"
+
         ]
     },
     "require-dev": {
