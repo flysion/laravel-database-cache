@@ -17,7 +17,9 @@
         "psr-4": {
             "Flysion\\Database\\": "src/"
         },
-        "files": []
+        "files": [
+            "src/helpers.php"
+        ]
     },
     "require-dev": {
 

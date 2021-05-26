@@ -2,57 +2,103 @@
 
 namespace Flysion\Database;
 
+/**
+ *
+ */
 class Cache
 {
     /**
+     * @var object
+     */
+    protected $object;
+
+    /**
      * @var string|\Illuminate\Contracts\Cache\Repository
      */
-    public $driver;
+    protected $driver;
 
     /**
      * @var \DateTimeInterface|\DateInterval|int|null
      */
-    public $ttl;
+    protected $ttl;
 
     /**
      * @var string
      */
-    public $prefix = '';
-
-    /**
-     * @var string
-     */
-    public $key;
+    protected $key;
 
     /**
      * @var boolean
      */
-    public $nullable = false;
+    protected $allowNull = false;
 
     /**
-     * @var Cache
-     */
-    public $prev;
-
-    /**
-     * @param string|\Illuminate\Contracts\Cache\Repository $driver
+     * @param object $object
+     * @param string $key
      * @param \DateTimeInterface|\DateInterval|int|null $ttl
-     * @param string|null $key
-     * @param bool $nullable 如果缓存有读取到，且值为 null，则不再继续读数据库
+     * @param bool $allowNull 将 null 也缓存起来
+     * @param string|\Illuminate\Contracts\Cache\Repository|null $driver
      */
-    public function __construct($driver, $ttl = null, $key = null, $nullable = false)
+    public function __construct($object, $key, $ttl = null, $allowNull = false, $driver = null)
     {
-        $this->driver = $driver;
-        $this->ttl = $ttl;
+        $this->object = $object;
         $this->key = $key;
-        $this->nullable = $nullable;
+        $this->ttl = $ttl;
+        $this->allowNull = $allowNull;
+        $this->driver = $driver;
+    }
+
+    /**
+     * @param string $key
+     * @param \DateTimeInterface|\DateInterval|int|null $ttl
+     * @param bool $allowNull 将 null 也缓存起来
+     * @param string|\Illuminate\Contracts\Cache\Repository|null $driver
+     * @return Cache
+     */
+    public function cache($key = null, $ttl = null, $allowNull = false, $driver = null)
+    {
+        return new static($this, $key ?? $this->key, $ttl ?? $this->ttl, $allowNull, $driver);
+    }
+
+    /**
+     * @param string $key
+     * @param \DateTimeInterface|\DateInterval|int|null $ttl
+     * @param bool $allowNull 将 null 也缓存起来
+     * @return Cache
+     */
+    public function cacheFromArray($key = null, $ttl = null, $allowNull = false)
+    {
+        return $this->cache($key, $ttl, $allowNull, 'array');
+    }
+
+    /**
+     * @param null $key
+     * @return mixed
+     */
+    public function cacheKey($key = null)
+    {
+        return $this->object->cacheKey($key ?? $this->key);
+    }
+
+    /**
+     * 销毁缓存
+     * @throws \Psr\SimpleCache\InvalidArgumentException
+     * @return bool
+     */
+    public function cacheDestroy()
+    {
+        if($this->object instanceof static) {
+            $this->object->cacheDestroy();
+        }
+
+        return $this->cacheDriver()->delete($this->cacheKey());
     }
 
     /**
      * @return \Illuminate\Contracts\Cache\Repository
      * @throws \Exception
      */
-    public function driver()
+    protected function cacheDriver()
     {
         if($this->driver instanceof \Illuminate\Contracts\Cache\Repository)
         {
@@ -63,65 +109,26 @@ class Cache
     }
 
     /**
-     * @param null|string $lowKey
-     * @return string
-     */
-    public function fullKey($lowKey = null)
-    {
-        return $this->prefix . (empty($this->key) ? $lowKey : $this->key);
-    }
-
-    /**
-     * @param string|null $lowKey
-     * @return array(boolean, mixed, Cache)
-     * @throws \Psr\SimpleCache\InvalidArgumentException
-     */
-    public function get($lowKey = null)
-    {
-        if($this->prev) {
-            list($nullable, $value, $cache) = $this->prev->get($lowKey);
-            if(!is_null($value) || $nullable) {
-                return [$nullable, $value, $cache];
-            }
-        }
-
-        return [$this->nullable, $this->driver()->get($this->fullKey($lowKey)), $this];
-    }
-
-    /**
-     * @param mixed $value
-     * @param string|null $lowKey
-     * @throws \Exception
-     */
-    public function put($value, $lowKey = null)
-    {
-        if($this->prev) {
-            $this->prev->put($value, $lowKey);
-        }
-
-        $this->driver()->put($this->fullKey($lowKey), $value, $this->ttl);
-    }
-
-    /**
-     * @param \Closure $callback
-     * @return array
+     * @param string $name
+     * @param mixed[] $arguments
+     * @return mixed
      * @throws
      */
-    public function remember(\Closure $callback, $lowKey = null)
+    public function __call($name, $arguments)
     {
-        list($nullable, $value, $cache) = $this->get($lowKey);
-        if(!is_null($value)) {
-            if($cache->prev) $cache->prev->put($value, $lowKey);
-            return $value;
-        } elseif($nullable) {
+        $result = $this->cacheDriver()->get($this->cacheKey());
+        if(!is_null($result)) {
+            return $result;
+        }
+
+        if($result === "\0" && $this->allowNull) {
             return null;
         }
 
-        $value = call_user_func($callback);
-        if(!is_null($value)) {
-            $this->put($value, $lowKey);
-        }
+        $result = $this->object->{$name}(...$arguments);
 
-        return $value;
+        $this->cacheDriver()->put($this->cacheKey(), $result ?? "\0", $this->ttl);
+
+        return $result;
     }
 }
