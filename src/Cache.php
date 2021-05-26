@@ -33,6 +33,11 @@ class Cache
     protected $allowNull = false;
 
     /**
+     * @var bool
+     */
+    private $isRefresh = false;
+
+    /**
      * @param object $object
      * @param string $key
      * @param \DateTimeInterface|\DateInterval|int|null $ttl
@@ -86,13 +91,15 @@ class Cache
      * @param null $key
      * @return mixed
      */
-    public function cacheKey($key = null)
+    protected function cacheKey($key = null)
     {
         return $this->object->cacheKey($key ?? $this->key);
     }
 
     /**
      * 销毁缓存
+     * 可将多级缓存全部销毁
+     *
      * @throws \Psr\SimpleCache\InvalidArgumentException
      * @return bool
      */
@@ -103,6 +110,23 @@ class Cache
         }
 
         return $this->cacheDriver()->delete($this->cacheKey());
+    }
+
+    /**
+     * 绕过缓存直接从源头读取数据，并写入缓存
+     * 可用于主动刷新缓存
+     *
+     * @return static
+     */
+    public function cacheRefresh()
+    {
+        if($this->object instanceof static) {
+            $this->object->cacheRefresh();
+        }
+
+        $this->isRefresh = true;
+
+        return $this;
     }
 
     /**
@@ -127,13 +151,16 @@ class Cache
      */
     public function __call($name, $arguments)
     {
-        $result = $this->cacheDriver()->get($this->cacheKey());
-        if(!is_null($result)) {
-            return $result;
-        }
+        if(!$this->isRefresh)
+        {
+            $result = $this->cacheDriver()->get($this->cacheKey());
+            if (!is_null($result)) {
+                return $result;
+            }
 
-        if($result === "\0" && $this->allowNull) {
-            return null;
+            if ($result === "\0" && $this->allowNull) {
+                return null;
+            }
         }
 
         $result = $this->object->{$name}(...$arguments);

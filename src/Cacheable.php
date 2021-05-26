@@ -9,7 +9,7 @@ trait Cacheable
 {
     /**
      * @param \Illuminate\Database\Eloquent\Builder $builder
-     * @param string $key
+     * @param string $key 缓存的KEY
      * @param \DateTimeInterface|\DateInterval|int|null $ttl
      * @param bool $allowNull 将 null 也缓存起来
      * @param string|\Illuminate\Contracts\Cache\Repository|null $driver
@@ -24,6 +24,32 @@ trait Cacheable
             $allowNull,
             $driver ?? $this->cacheDefaultDriver ?? null
         );
+    }
+
+    /**
+     * @param \Illuminate\Database\Eloquent\Builder $builder
+     * @param string $where where 条件
+     * @param \DateTimeInterface|\DateInterval|int|null $ttl
+     * @param bool $allowNull 将 null 也缓存起来
+     * @param string|\Illuminate\Contracts\Cache\Repository|null $driver
+     * @return Cache
+     */
+    public function scopeWhereWithCache($builder, $where, $ttl = null, $allowNull = false, $driver = null)
+    {
+        return $builder->where($where)->cache(implode(':', $where), $ttl, $allowNull, $driver);
+    }
+
+    /**
+     * @param \Illuminate\Database\Eloquent\Builder $builder
+     * @param string $key 数据库的主键
+     * @param \DateTimeInterface|\DateInterval|int|null $ttl
+     * @param bool $allowNull 将 null 也缓存起来
+     * @param string|\Illuminate\Contracts\Cache\Repository|null $driver
+     * @return Cache
+     */
+    public function scopeWhereKeyWithCache($builder, $key, $ttl = null, $allowNull = false, $driver = null)
+    {
+        return $builder->whereKey($key)->cache($key, $ttl, $allowNull, $driver);
     }
 
     /**
