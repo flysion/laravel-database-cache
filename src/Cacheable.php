@@ -41,6 +41,18 @@ trait Cacheable
     /**
      * @param \Illuminate\Database\Eloquent\Builder $builder
      * @param string $key
+     * @param \DateTimeInterface|\DateInterval|int|null $ttl
+     * @param bool $allowNull 将 null 也缓存起来
+     * @return Cache
+     */
+    public function scopeCacheFromFile($builder, $key, $ttl = null, $allowNull = false)
+    {
+        return $this->cache($key, $ttl, $allowNull, 'file');
+    }
+
+    /**
+     * @param \Illuminate\Database\Eloquent\Builder $builder
+     * @param string $key
      * @return string
      */
     public function scopeCacheKey($builder, $key)

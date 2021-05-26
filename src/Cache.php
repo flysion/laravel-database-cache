@@ -72,6 +72,17 @@ class Cache
     }
 
     /**
+     * @param string $key
+     * @param \DateTimeInterface|\DateInterval|int|null $ttl
+     * @param bool $allowNull 将 null 也缓存起来
+     * @return Cache
+     */
+    public function cacheFromFile($key = null, $ttl = null, $allowNull = false)
+    {
+        return $this->cache($key, $ttl, $allowNull, 'file');
+    }
+
+    /**
      * @param null $key
      * @return mixed
      */
