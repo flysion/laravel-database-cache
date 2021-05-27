@@ -2,138 +2,57 @@
 
 namespace Flysion\Database;
 
-/**
- *
- */
 class Cache
 {
     /**
-     * @var object
-     */
-    protected $object;
-
-    /**
      * @var string|\Illuminate\Contracts\Cache\Repository
      */
-    protected $driver;
+    public $driver;
 
     /**
      * @var \DateTimeInterface|\DateInterval|int|null
      */
-    protected $ttl;
+    public $ttl;
 
     /**
      * @var string
      */
-    protected $key;
+    public $prefix = '';
+
+    /**
+     * @var string
+     */
+    public $key;
 
     /**
      * @var boolean
      */
-    protected $allowNull = false;
+    public $nullable = false;
 
     /**
-     * @var bool
+     * @var Cache
      */
-    private $isRefresh = false;
+    public $prev;
 
     /**
-     * @param object $object
-     * @param string $key
+     * @param string|\Illuminate\Contracts\Cache\Repository $driver
      * @param \DateTimeInterface|\DateInterval|int|null $ttl
-     * @param bool $allowNull 将 null 也缓存起来
-     * @param string|\Illuminate\Contracts\Cache\Repository|null $driver
+     * @param string|null $key
+     * @param bool $nullable 如果缓存有读取到，且值为 null，则不再继续读数据库
      */
-    public function __construct($object, $key, $ttl = null, $allowNull = false, $driver = null)
+    public function __construct($driver, $ttl = null, $key = null, $nullable = false)
     {
-        $this->object = $object;
-        $this->key = $key;
-        $this->ttl = $ttl;
-        $this->allowNull = $allowNull;
         $this->driver = $driver;
-    }
-
-    /**
-     * @param string $key
-     * @param \DateTimeInterface|\DateInterval|int|null $ttl
-     * @param bool $allowNull 将 null 也缓存起来
-     * @param string|\Illuminate\Contracts\Cache\Repository|null $driver
-     * @return Cache
-     */
-    public function cache($key = null, $ttl = null, $allowNull = false, $driver = null)
-    {
-        return new static($this, $key ?? $this->key, $ttl ?? $this->ttl, $allowNull, $driver);
-    }
-
-    /**
-     * @param string $key
-     * @param \DateTimeInterface|\DateInterval|int|null $ttl
-     * @param bool $allowNull 将 null 也缓存起来
-     * @return Cache
-     */
-    public function cacheFromArray($key = null, $ttl = null, $allowNull = false)
-    {
-        return $this->cache($key, $ttl, $allowNull, 'array');
-    }
-
-    /**
-     * @param string $key
-     * @param \DateTimeInterface|\DateInterval|int|null $ttl
-     * @param bool $allowNull 将 null 也缓存起来
-     * @return Cache
-     */
-    public function cacheFromFile($key = null, $ttl = null, $allowNull = false)
-    {
-        return $this->cache($key, $ttl, $allowNull, 'file');
-    }
-
-    /**
-     * @param null $key
-     * @return mixed
-     */
-    protected function cacheKey($key = null)
-    {
-        return $this->object->cacheKey($key ?? $this->key);
-    }
-
-    /**
-     * 销毁缓存
-     * 可将多级缓存全部销毁
-     *
-     * @throws \Psr\SimpleCache\InvalidArgumentException
-     * @return bool
-     */
-    public function cacheDestroy()
-    {
-        if($this->object instanceof static) {
-            $this->object->cacheDestroy();
-        }
-
-        return $this->cacheDriver()->delete($this->cacheKey());
-    }
-
-    /**
-     * 绕过缓存直接从源头读取数据，并写入缓存
-     * 可用于主动刷新缓存
-     *
-     * @return static
-     */
-    public function cacheRefresh()
-    {
-        if($this->object instanceof static) {
-            $this->object->cacheRefresh();
-        }
-
-        $this->isRefresh = true;
-
-        return $this;
+        $this->ttl = $ttl;
+        $this->key = $key;
+        $this->nullable = $nullable;
     }
 
     /**
      * @return \Illuminate\Contracts\Cache\Repository
      * @throws \Exception
      */
-    protected function cacheDriver()
+    public function driver()
     {
         if($this->driver instanceof \Illuminate\Contracts\Cache\Repository)
         {
@@ -144,29 +63,65 @@ class Cache
     }
 
     /**
-     * @param string $name
-     * @param mixed[] $arguments
-     * @return mixed
-     * @throws
+     * @param null|string $lowKey
+     * @return string
      */
-    public function __call($name, $arguments)
+    public function fullKey($lowKey = null)
     {
-        if(!$this->isRefresh)
-        {
-            $result = $this->cacheDriver()->get($this->cacheKey());
-            if (!is_null($result)) {
-                return $result;
-            }
+        return $this->prefix . (empty($this->key) ? $lowKey : $this->key);
+    }
 
-            if ($result === "\0" && $this->allowNull) {
-                return null;
+    /**
+     * @param string|null $lowKey
+     * @return array(boolean, mixed, Cache)
+     * @throws \Psr\SimpleCache\InvalidArgumentException
+     */
+    public function get($lowKey = null)
+    {
+        if($this->prev) {
+            list($nullable, $value, $cache) = $this->prev->get($lowKey);
+            if(!is_null($value) || $nullable) {
+                return [$nullable, $value, $cache];
             }
         }
 
-        $result = $this->object->{$name}(...$arguments);
+        return [$this->nullable, $this->driver()->get($this->fullKey($lowKey)), $this];
+    }
 
-        $this->cacheDriver()->put($this->cacheKey(), $result ?? "\0", $this->ttl);
+    /**
+     * @param mixed $value
+     * @param string|null $lowKey
+     * @throws \Exception
+     */
+    public function put($value, $lowKey = null)
+    {
+        if($this->prev) {
+            $this->prev->put($value, $lowKey);
+        }
 
-        return $result;
+        $this->driver()->put($this->fullKey($lowKey), $value, $this->ttl);
+    }
+
+    /**
+     * @param \Closure $callback
+     * @return array
+     * @throws
+     */
+    public function remember(\Closure $callback, $lowKey = null)
+    {
+        list($nullable, $value, $cache) = $this->get($lowKey);
+        if(!is_null($value)) {
+            if($cache->prev) $cache->prev->put($value, $lowKey);
+            return $value;
+        } elseif($nullable) {
+            return null;
+        }
+
+        $value = call_user_func($callback);
+        if(!is_null($value)) {
+            $this->put($value, $lowKey);
+        }
+
+        return $value;
     }
 }
