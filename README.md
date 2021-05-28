@@ -71,7 +71,7 @@ Laravel数据库缓存
     User::cache(null, 300, false, 'redis', true)->get();
 
 ## cache 函数原型
-由于同时支持**DB缓存**和**ORM缓存**所以文中提到的`cache`、`cacheFromArray`、`cacheFromFile`等方法，在以下两个地方都有实现（且返回原型有细微差别，进阶用法还需自己多看源码）：
+由于同时支持**DB缓存**和**ORM缓存**所以文中提到的`cache`、`cacheFromArray`、`cacheFromFile`等方法，在以下两个地方都有实现（原型有细微差别，进阶用法还需自己多看源码）：
 
 + `\Flysion\Database\EloquentBuilder::class`
 
