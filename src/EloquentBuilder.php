@@ -7,53 +7,109 @@ class EloquentBuilder extends \Illuminate\Database\Eloquent\Builder
     /**
      * @var Cache
      */
-    protected $cache;
+    public $cache;
 
     /**
-     * @param string|\Illuminate\Contracts\Cache\Repository|null $driver
+     * @param int|null $refreshTtl
      * @param \DateTimeInterface|\DateInterval|int|null $ttl
-     * @param string|null $key
-     * @param bool $nullable false:如果缓存有读取到，且值为 null，则不再继续读数据库
-     * @return static
+     * @param bool $allowNull
+     * @param string|\Illuminate\Contracts\Cache\Repository|null $driver
+     * @return Cache
      */
-    public function queryCache($driver = null, $ttl = null, $key = null, $nullable = false)
+    protected function newCache($refreshTtl = null, $ttl = null, $allowNull = false, $driver = null)
     {
-        if(!$driver) {
-            $driver = method_exists($this->getModel(), 'cacheDriver') ? $this->getModel()->cacheDriver() : (
-                $this->getModel()->cacheDriver ?? config('cache.default')
-            );
+        $model = $this->getModel();
+
+        if(is_null($driver)) {
+            if(method_exists($model, 'cacheDriver')) {
+                $driver = $model->cacheDriver();
+            } else {
+                $driver = $model->cacheDriver ?? null;
+            }
         }
 
-        $cache = new Cache($driver, $ttl, $key, $nullable);
-        $cache->prefix = sprintf('db:%s:%s:', $this->getModel()->getConnectionName(), $this->getModel()->getTable());
+        $prefix = sprintf('db:%s:%s:', $model->getConnectionName(), $model->getTable());
 
-        $this->query->queryCache($cache);
+        return new Cache(
+            $refreshTtl,
+            $ttl,
+            $allowNull,
+            $driver,
+            $prefix
+        );
+    }
+
+    /**
+     * @param int|null $refreshTtl
+     * @param \DateTimeInterface|\DateInterval|int|null $ttl
+     * @param bool $allowNull
+     * @param string|\Illuminate\Contracts\Cache\Repository|null $driver
+     * @param bool $useModelCache
+     * @return static
+     */
+    public function cache($refreshTtl = null, $ttl = null, $allowNull = false, $driver = null, $useModelCache = false)
+    {
+        $object = $useModelCache ? $this : $this->getQuery();
+
+        if(!$object->cache) {
+            $object->cache = $this->newCache($refreshTtl, $ttl, $allowNull, $driver);
+        } else {
+            $object->cache = $object->cache->next($refreshTtl, $ttl, $allowNull, $driver);
+        }
 
         return $this;
     }
 
     /**
-     * @param string|\Illuminate\Contracts\Cache\Repository|null $driver
+     * @param int|null $refreshTtl
      * @param \DateTimeInterface|\DateInterval|int|null $ttl
-     * @param string|null $key
-     * @param bool $nullable false:如果缓存有读取到，且值为 null，则不再继续读数据库
+     * @param bool $allowNull
+     * @param bool $useModelCache
      * @return static
      */
-    public function modelCache($driver = null, $ttl = null, $key = null, $nullable = false)
+    public function cacheFromArray($refreshTtl = null, $ttl = null, $allowNull = false, $useModelCache = false)
     {
-        if(!$driver) {
-            $driver = method_exists($this->getModel(), 'cacheDriver') ? $this->getModel()->cacheDriver() : (
-                $this->getModel()->cacheDriver ?? config('cache.default')
-            );
-        }
+        return $this->cache($refreshTtl, $ttl, $allowNull, 'array', $useModelCache);
+    }
 
-        $cache = new Cache($driver, $ttl, $key, $nullable);
-        $cache->prefix = sprintf('db:%s:%s:', $this->getModel()->getConnectionName(), $this->getModel()->getTable());
+    /**
+     * @param int|null $refreshTtl
+     * @param \DateTimeInterface|\DateInterval|int|null $ttl
+     * @param bool $allowNull
+     * @param bool $useModelCache
+     * @return static
+     */
+    public function cacheFromFile($refreshTtl = null, $ttl = null, $allowNull = false, $useModelCache = false)
+    {
+        return $this->cache($refreshTtl, $ttl, $allowNull, 'file', $useModelCache);
+    }
 
-        $cache->prev = $this->cache;
-        $this->cache = $cache;
+    /**
+     * @param $key
+     * @param int|null $refreshTtl
+     * @param \DateTimeInterface|\DateInterval|int|null $ttl
+     * @param bool $allowNull
+     * @param string|\Illuminate\Contracts\Cache\Repository|null $driver
+     * @param bool $useModelCache
+     * @return static
+     */
+    public function whereKeyWithCache($key, $refreshTtl = null, $ttl = null, $allowNull = false, $driver = null, $useModelCache = false)
+    {
+        return $this->whereKey($key)->cache($refreshTtl, $ttl, $allowNull, $driver, $useModelCache);
+    }
 
-        return $this;
+    /**
+     * @param mixed $where
+     * @param int|null $refreshTtl
+     * @param \DateTimeInterface|\DateInterval|int|null $ttl
+     * @param bool $allowNull
+     * @param string|\Illuminate\Contracts\Cache\Repository|null $driver
+     * @param bool $useModelCache
+     * @return static
+     */
+    public function whereWithCache($where, $refreshTtl = null, $ttl = null, $allowNull = false, $driver = null, $useModelCache = false)
+    {
+        return $this->where($where)->cache($refreshTtl, $ttl, $allowNull, $driver, $useModelCache);
     }
 
     /**
@@ -61,19 +117,21 @@ class EloquentBuilder extends \Illuminate\Database\Eloquent\Builder
      *
      * @param  array|string  $columns
      * @return \Illuminate\Database\Eloquent\Model[]|static[]
+     * @throws
      */
     public function getModels($columns = ['*'])
     {
-        if(!$this->cache) {
+        if(!isset($this->cache)) {
             return parent::getModels($columns);
         }
 
-        return $this->cache->remember(
-            function() use($columns) {
-                $results = parent::getModels($columns);dump($results);
-                return count($results) === 0 ? null : $results;
-            },
-            md5($this->getQuery()->sql() . (is_string($columns) ? $columns : implode('-', $columns)))
-        ) ?? [];
+        $sql = $this->getQuery()->onceWithColumns($columns, function() {
+            return sql($this->getQuery()->toSql(), $this->getQuery()->getBindings());
+        });
+
+        return $this->cache->remember(function() use($columns) {
+           $result = parent::getModels($columns);
+           return count($result) === 0 ? null : $result;
+        }, md5($sql)) ?? [];
     }
 }

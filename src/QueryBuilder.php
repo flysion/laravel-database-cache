@@ -7,36 +7,61 @@ class QueryBuilder extends \Illuminate\Database\Query\Builder
     /**
      * @var Cache;
      */
-    protected $cache;
+    public $cache;
 
     /**
-     * @return static|Cache
+     * @param int|null $refreshTtl
+     * @param \DateTimeInterface|\DateInterval|int|null $ttl
+     * @param bool $allowNull
+     * @param string|\Illuminate\Contracts\Cache\Repository|null $driver
+     * @return static
      */
-    public function queryCache()
+    public function cache($refreshTtl = null, $ttl = null, $allowNull = false, $driver = null)
     {
-        $arguments = func_get_args();
-
-        if(count($arguments) === 1 && $arguments[0] instanceof Cache)
-        {
-            $cache = $arguments[0];
+        if(!$this->cache) {
+            $this->cache = new Cache(
+                $refreshTtl, $ttl, $allowNull, $driver, 'db:'
+            );
+        } else {
+            $this->cache = $this->cache->next($refreshTtl, $ttl, $allowNull, $driver);
         }
-
-        $cache->prev = $this->cache;
-        $this->cache = $cache;
 
         return $this;
     }
 
     /**
-     * get sql
-     *
-     * @return string
+     * @param int|null $refreshTtl
+     * @param \DateTimeInterface|\DateInterval|int|null $ttl
+     * @param bool $allowNull
+     * @return static
      */
-    public function sql()
+    public function cacheFromArray($refreshTtl = null, $ttl = null, $allowNull = false)
     {
-        $bindings = $this->getBindings();
-        $sql = str_replace('?', '%s', $this->toSql());
-        return sprintf($sql, ...$bindings);
+        return $this->cache($refreshTtl, $ttl, $allowNull, 'array');
+    }
+
+    /**
+     * @param int|null $refreshTtl
+     * @param \DateTimeInterface|\DateInterval|int|null $ttl
+     * @param bool $allowNull
+     * @return static
+     */
+    public function cacheFromFile($refreshTtl = null, $ttl = null, $allowNull = false)
+    {
+        return $this->cache($refreshTtl, $ttl, $allowNull, 'file');
+    }
+
+    /**
+     * @param mixed $where
+     * @param int|null $refreshTtl
+     * @param \DateTimeInterface|\DateInterval|int|null $ttl
+     * @param bool $allowNull
+     * @param string|\Illuminate\Contracts\Cache\Repository|null $driver
+     * @return static
+     */
+    public function whereWithCache($where, $refreshTtl = null, $ttl = null, $allowNull = false, $driver = null)
+    {
+        return $this->where($where)->cache($refreshTtl, $ttl, $allowNull, $driver);
     }
 
     /**
@@ -51,9 +76,25 @@ class QueryBuilder extends \Illuminate\Database\Query\Builder
             return parent::runSelect();
         }
 
+        $sql = sql($this->toSql(), $this->getBindings());
+
         return $this->cache->remember(function() {
-            $results = parent::runSelect();
-            return count($results) === 0 ? null : $results;
-        }, md5($this->sql()));
+            $result = parent::runSelect();
+            return count($result) === 0 ? null : $result;
+        }, md5($sql)) ?? [];
+    }
+
+    /**
+     * Execute the given callback while selecting the given columns.
+     *
+     * After running the callback, the columns are reset to the original value.
+     *
+     * @param  array  $columns
+     * @param  callable  $callback
+     * @return mixed
+     */
+    public function onceWithColumns($columns, $callback)
+    {
+        return parent::onceWithColumns($columns, $callback);
     }
 }

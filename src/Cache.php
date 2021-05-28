@@ -2,57 +2,82 @@
 
 namespace Flysion\Database;
 
+/**
+ *
+ */
 class Cache
 {
     /**
      * @var string|\Illuminate\Contracts\Cache\Repository
      */
-    public $driver;
+    protected $driver;
 
     /**
      * @var \DateTimeInterface|\DateInterval|int|null
      */
-    public $ttl;
+    protected $ttl;
 
     /**
-     * @var string
+     * @var \DateTimeInterface|\DateInterval|int|null
      */
-    public $prefix = '';
-
-    /**
-     * @var string
-     */
-    public $key;
+    protected $refreshTtl;
 
     /**
      * @var boolean
      */
-    public $nullable = false;
+    protected $allowNull = false;
 
     /**
-     * @var Cache
+     * @var null|string
      */
-    public $prev;
+    protected $prefix;
 
     /**
-     * @param string|\Illuminate\Contracts\Cache\Repository $driver
+     * @var static
+     */
+    protected $prev = null;
+
+    /**
+     * @var static
+     */
+    protected $next = null;
+
+    /**
+     * @param int|null $refreshTtl
      * @param \DateTimeInterface|\DateInterval|int|null $ttl
-     * @param string|null $key
-     * @param bool $nullable 如果缓存有读取到，且值为 null，则不再继续读数据库
+     * @param bool $allowNull
+     * @param string|\Illuminate\Contracts\Cache\Repository|null $driver
+     * @param string $prefix
      */
-    public function __construct($driver, $ttl = null, $key = null, $nullable = false)
+    public function __construct($refreshTtl = null, $ttl = null, $allowNull = false, $driver = null, $prefix = null)
     {
-        $this->driver = $driver;
+        $this->refreshTtl = $refreshTtl;
         $this->ttl = $ttl;
-        $this->key = $key;
-        $this->nullable = $nullable;
+        $this->allowNull = $allowNull;
+        $this->driver = $driver;
+        $this->prefix = $prefix;
+    }
+
+    /**
+     * @param int|null $refreshTtl
+     * @param \DateTimeInterface|\DateInterval|int|null $ttl
+     * @param bool $allowNull
+     * @param string|\Illuminate\Contracts\Cache\Repository|null $driver
+     * @return static
+     */
+    public function next($refreshTtl = null, $ttl = null, $allowNull = false, $driver = null)
+    {
+        $instance = new static($refreshTtl ?? $this->refreshTtl, $ttl ?? $this->ttl, $allowNull, $driver, $this->prefix);
+        $this->next = $instance;
+        $instance->prev = $this;
+        return $instance;
     }
 
     /**
      * @return \Illuminate\Contracts\Cache\Repository
      * @throws \Exception
      */
-    public function driver()
+    protected function driver()
     {
         if($this->driver instanceof \Illuminate\Contracts\Cache\Repository)
         {
@@ -63,65 +88,90 @@ class Cache
     }
 
     /**
-     * @param null|string $lowKey
-     * @return string
-     */
-    public function fullKey($lowKey = null)
-    {
-        return $this->prefix . (empty($this->key) ? $lowKey : $this->key);
-    }
-
-    /**
-     * @param string|null $lowKey
-     * @return array(boolean, mixed, Cache)
+     * @param string $key
+     * @return array
      * @throws \Psr\SimpleCache\InvalidArgumentException
      */
-    public function get($lowKey = null)
+    public function get($key)
     {
-        if($this->prev) {
-            list($nullable, $value, $cache) = $this->prev->get($lowKey);
-            if(!is_null($value) || $nullable) {
-                return [$nullable, $value, $cache];
-            }
+        $result = $this->driver()->get($this->prefix . $key);
+
+        if(is_null($result)) {
+            return $this->prev ? $this->prev->get($key) : [$this, null, false, null];
         }
 
-        return [$this->nullable, $this->driver()->get($this->fullKey($lowKey)), $this];
+        if($result !== "\0") {
+            return [$this, $result[0], true, $result[1]];
+        }
+
+        if($this->allowNull) {
+            return [$this, $result[0], true, null];
+        }
+
+        return $this->prev ? $this->prev->get($key) : [$this, null, false, null];
     }
 
     /**
-     * @param mixed $value
-     * @param string|null $lowKey
+     * @param string $key
+     * @param mixed $data
      * @throws \Exception
      */
-    public function put($value, $lowKey = null)
+    public function put($key, $data)
     {
-        if($this->prev) {
-            $this->prev->put($value, $lowKey);
-        }
+        $this->driver()->put($this->prefix . $key, [time(), $data ?? "\0"], $this->ttl);
+        $this->putNext($key, $data);
+    }
 
-        $this->driver()->put($this->fullKey($lowKey), $value, $this->ttl);
+    /**
+     * @param string $key
+     * @param mixed $data
+     * @throws \Exception
+     */
+    public function putNext($key, $data)
+    {
+        if($this->next) {
+            $this->next->put($key, $data);
+        }
     }
 
     /**
      * @param \Closure $callback
-     * @return array
+     * @param string $key
+     * @return mixed
      * @throws
      */
-    public function remember(\Closure $callback, $lowKey = null)
+    public function remember(\Closure $callback, $key)
     {
-        list($nullable, $value, $cache) = $this->get($lowKey);
-        if(!is_null($value)) {
-            if($cache->prev) $cache->prev->put($value, $lowKey);
-            return $value;
-        } elseif($nullable) {
-            return null;
+        list($cache, $ts, $exists, $data) = $this->get($key);
+
+        do {
+            if(!$exists) {
+                break;
+            }
+
+            // 数据还可以用，但是需要刷新
+
+            if($this->refreshTtl && $ts + $this->refreshTtl < time()) {
+                break;
+            }
+
+            $cache->putNext($key, $data);
+            return $data;
+        } while(false);
+
+        try {
+            $data = $callback();
+        } catch (\Exception $e) {
+            if($exists) {
+                report($e);
+                return $data; // 数据还可以用，刷新失败接着用
+            }
+
+            throw $e;
         }
 
-        $value = call_user_func($callback);
-        if(!is_null($value)) {
-            $this->put($value, $lowKey);
-        }
+        $cache->put($key, $data);
 
-        return $value;
+        return $data;
     }
 }
