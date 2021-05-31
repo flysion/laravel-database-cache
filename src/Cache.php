@@ -100,7 +100,7 @@ class Cache
             return $this->prev ? $this->prev->get($key) : [$this, null, false, null];
         }
 
-        if($result !== "\0") {
+        if($result[1] !== "\0") {
             return [$this, $result[0], true, $result[1]];
         }
 
