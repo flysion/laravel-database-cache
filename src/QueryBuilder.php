@@ -18,7 +18,7 @@ class QueryBuilder extends \Illuminate\Database\Query\Builder
         $options = array_merge([
             'refresh_ttl' => null,
             'ttl' => null,
-            'allow_null' => false,
+            'allow_empty' => null,
             'driver' => null,
         ], $options);
 
@@ -26,7 +26,7 @@ class QueryBuilder extends \Illuminate\Database\Query\Builder
             $this->cache = new Cache(
                 $options['refresh_ttl'],
                 $options['ttl'],
-                $options['allow_null'],
+                $options['allow_empty'],
                 $options['driver'],
                 'db:'
             );
@@ -34,7 +34,7 @@ class QueryBuilder extends \Illuminate\Database\Query\Builder
             $this->cache = $this->cache->next(
                 $options['refresh_ttl'],
                 $options['ttl'],
-                $options['allow_null'],
+                $options['allow_empty'],
                 $options['driver']
             );
         }

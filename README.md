@@ -56,7 +56,7 @@ Laravel数据库缓存
     User::cache(['driver' => 'redis', 'ttl' => 86400, 'refresh_ttl' => 300])->get();
     
     // 如果数据库查询不到数据，则下次不再查询数据库，直接返回空数据
-    User::cache(['driver' => 'redis', 'ttl' => 86400, 'allow_null' => true])->get();
+    User::cache(['driver' => 'redis', 'ttl' => 86400, 'allow_empty' => true])->get();
     
     // 无限期缓存数据，在缓存期间每【300】秒读取一次数据库（并刷新到【redis】）
     // 如果缓存刷新失败则继续使用上一次缓存的数据
@@ -76,7 +76,7 @@ Laravel数据库缓存
 driver|string|null|缓存介质，见 `config('cache.stores')`
 ttl|int|null|存储在介质中的过期时间
 refresh_ttl|int|null|缓存刷新周期
-allow_null|bool|false|如果数据库读取不到数据则下次不再继续读取数据库
+allow_empty|bool/null|null(false)|如果数据库读取不到数据则下次不再继续读取数据库
 use_model_cache|bool|false|是否缓存 model
 
 
@@ -99,8 +99,8 @@ use_model_cache|bool|false|是否缓存 model
         }
     }
     
-二级及以上缓存如果`refresh_ttl`、`ttl`传`null`则直接继承上一级缓存的设置，示例如下：
+二级及以上缓存如果`refresh_ttl`、`ttl`、`allow_empty`传`null`则直接继承上一级缓存的设置，示例如下：
 
-    User::cache(['driver' => 'redis', 'ttl' => 300, 'refresh_ttl' => 86400)->cache(['driver' => 'array'])->get();
+    User::cache(['driver' => 'redis', 'ttl' => 300, 'refresh_ttl' => 86400, 'allow_empty' => true])->cache(['driver' => 'array'])->get();
     // 等同于
-    User::cache(['driver' => 'redis', 'ttl' => 300, 'refresh_ttl' => 86400)->cache(['driver' => 'array', 'ttl' => 300, 'refresh_ttl' => 86400])->get();
+    User::cache(['driver' => 'redis', 'ttl' => 300, 'refresh_ttl' => 86400, 'allow_empty' => true])->cache(['driver' => 'array', 'ttl' => 300, 'refresh_ttl' => 86400, 'allow_empty' => true])->get();

@@ -25,7 +25,7 @@ class Cache
     /**
      * @var boolean
      */
-    protected $allowNull = false;
+    protected $allowEmpty;
 
     /**
      * @var null|string
@@ -45,15 +45,15 @@ class Cache
     /**
      * @param int|null $refreshTtl
      * @param \DateTimeInterface|\DateInterval|int|null $ttl
-     * @param bool $allowNull
+     * @param bool|null $allowEmpty
      * @param string|\Illuminate\Contracts\Cache\Repository|null $driver
      * @param string $prefix
      */
-    public function __construct($refreshTtl = null, $ttl = null, $allowNull = false, $driver = null, $prefix = null)
+    public function __construct($refreshTtl = null, $ttl = null, $allowEmpty = null, $driver = null, $prefix = null)
     {
         $this->refreshTtl = $refreshTtl;
         $this->ttl = $ttl;
-        $this->allowNull = $allowNull;
+        $this->allowEmpty = $allowEmpty ?? false;
         $this->driver = $driver;
         $this->prefix = $prefix;
     }
@@ -61,13 +61,20 @@ class Cache
     /**
      * @param int|null $refreshTtl
      * @param \DateTimeInterface|\DateInterval|int|null $ttl
-     * @param bool $allowNull
+     * @param bool|null $allowEmpty
      * @param string|\Illuminate\Contracts\Cache\Repository|null $driver
      * @return static
      */
-    public function next($refreshTtl = null, $ttl = null, $allowNull = false, $driver = null)
+    public function next($refreshTtl = null, $ttl = null, $allowEmpty = null, $driver = null)
     {
-        $instance = new static($refreshTtl ?? $this->refreshTtl, $ttl ?? $this->ttl, $allowNull, $driver, $this->prefix);
+        $instance = new static(
+            $refreshTtl ?? $this->refreshTtl,
+            $ttl ?? $this->ttl,
+            $allowEmpty ?? $this->allowEmpty,
+            $driver,
+            $this->prefix
+        );
+
         $this->next = $instance;
         $instance->prev = $this;
         return $instance;
@@ -104,7 +111,7 @@ class Cache
             return [$this, $result[0], true, $result[1]];
         }
 
-        if($this->allowNull) {
+        if($this->allowEmpty) {
             return [$this, $result[0], true, null];
         }
 

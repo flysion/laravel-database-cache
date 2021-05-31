@@ -30,7 +30,7 @@ class EloquentBuilder extends \Illuminate\Database\Eloquent\Builder
         return new Cache(
             $options['refresh_ttl'],
             $options['ttl'],
-            $options['allow_null'],
+            $options['allow_empty'],
             $options['driver'],
             $prefix
         );
@@ -45,7 +45,7 @@ class EloquentBuilder extends \Illuminate\Database\Eloquent\Builder
         $options = array_merge([
             'refresh_ttl' => null,
             'ttl' => null,
-            'allow_null' => false,
+            'allow_empty' => null,
             'driver' => null,
             'use_model_cache' => false,
         ], $options);
@@ -56,7 +56,7 @@ class EloquentBuilder extends \Illuminate\Database\Eloquent\Builder
             $object->cache = $object->cache->next(
                 $options['refresh_ttl'],
                 $options['ttl'],
-                $options['allow_null'],
+                $options['allow_empty'],
                 $options['driver']
             );
         } else {
