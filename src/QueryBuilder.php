@@ -52,19 +52,6 @@ class QueryBuilder extends \Illuminate\Database\Query\Builder
     }
 
     /**
-     * @param mixed $where
-     * @param int|null $refreshTtl
-     * @param \DateTimeInterface|\DateInterval|int|null $ttl
-     * @param bool $allowNull
-     * @param string|\Illuminate\Contracts\Cache\Repository|null $driver
-     * @return static
-     */
-    public function whereWithCache($where, $refreshTtl = null, $ttl = null, $allowNull = false, $driver = null)
-    {
-        return $this->where($where)->cache($refreshTtl, $ttl, $allowNull, $driver);
-    }
-
-    /**
      * Run the query as a "select" statement against the connection.
      *
      * @return mixed
