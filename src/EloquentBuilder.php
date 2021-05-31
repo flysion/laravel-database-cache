@@ -10,78 +10,60 @@ class EloquentBuilder extends \Illuminate\Database\Eloquent\Builder
     public $cache;
 
     /**
-     * @param int|null $refreshTtl
-     * @param \DateTimeInterface|\DateInterval|int|null $ttl
-     * @param bool $allowNull
-     * @param string|\Illuminate\Contracts\Cache\Repository|null $driver
+     * @param array $options
      * @return Cache
      */
-    protected function newCache($refreshTtl = null, $ttl = null, $allowNull = false, $driver = null)
+    protected function newCache($options)
     {
         $model = $this->getModel();
 
-        if(is_null($driver)) {
+        if(is_null($options['driver'])) {
             if(method_exists($model, 'cacheDriver')) {
-                $driver = $model->cacheDriver();
+                $options['driver'] = $model->cacheDriver();
             } else {
-                $driver = $model->cacheDriver ?? null;
+                $options['driver'] = $model->cacheDriver ?? null;
             }
         }
 
         $prefix = sprintf('db:%s:%s:', $model->getConnectionName(), $model->getTable());
 
         return new Cache(
-            $refreshTtl,
-            $ttl,
-            $allowNull,
-            $driver,
+            $options['refresh_ttl'],
+            $options['ttl'],
+            $options['allow_null'],
+            $options['driver'],
             $prefix
         );
     }
 
     /**
-     * @param int|null $refreshTtl
-     * @param \DateTimeInterface|\DateInterval|int|null $ttl
-     * @param bool $allowNull
-     * @param string|\Illuminate\Contracts\Cache\Repository|null $driver
-     * @param bool $useModelCache
+     * @param array $options
      * @return static
      */
-    public function cache($refreshTtl = null, $ttl = null, $allowNull = false, $driver = null, $useModelCache = false)
+    public function cache($options = [])
     {
-        $object = $useModelCache ? $this : $this->getQuery();
+        $options = array_merge([
+            'refresh_ttl' => null,
+            'ttl' => null,
+            'allow_null' => false,
+            'driver' => null,
+            'use_model_cache' => false,
+        ], $options);
 
-        if(!$object->cache) {
-            $object->cache = $this->newCache($refreshTtl, $ttl, $allowNull, $driver);
+        $object = $options['use_model_cache'] ? $this : $this->getQuery();
+
+        if($object->cache) {
+            $object->cache = $object->cache->next(
+                $options['refresh_ttl'],
+                $options['ttl'],
+                $options['allow_null'],
+                $options['driver']
+            );
         } else {
-            $object->cache = $object->cache->next($refreshTtl, $ttl, $allowNull, $driver);
+            $object->cache = $this->newCache($options);
         }
 
         return $this;
-    }
-
-    /**
-     * @param int|null $refreshTtl
-     * @param \DateTimeInterface|\DateInterval|int|null $ttl
-     * @param bool $allowNull
-     * @param bool $useModelCache
-     * @return static
-     */
-    public function cacheFromArray($refreshTtl = null, $ttl = null, $allowNull = false, $useModelCache = false)
-    {
-        return $this->cache($refreshTtl, $ttl, $allowNull, 'array', $useModelCache);
-    }
-
-    /**
-     * @param int|null $refreshTtl
-     * @param \DateTimeInterface|\DateInterval|int|null $ttl
-     * @param bool $allowNull
-     * @param bool $useModelCache
-     * @return static
-     */
-    public function cacheFromFile($refreshTtl = null, $ttl = null, $allowNull = false, $useModelCache = false)
-    {
-        return $this->cache($refreshTtl, $ttl, $allowNull, 'file', $useModelCache);
     }
 
     /**

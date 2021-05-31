@@ -10,45 +10,36 @@ class QueryBuilder extends \Illuminate\Database\Query\Builder
     public $cache;
 
     /**
-     * @param int|null $refreshTtl
-     * @param \DateTimeInterface|\DateInterval|int|null $ttl
-     * @param bool $allowNull
-     * @param string|\Illuminate\Contracts\Cache\Repository|null $driver
+     * @param array $options
      * @return static
      */
-    public function cache($refreshTtl = null, $ttl = null, $allowNull = false, $driver = null)
+    public function cache($options = [])
     {
+        $options = array_merge([
+            'refresh_ttl' => null,
+            'ttl' => null,
+            'allow_null' => false,
+            'driver' => null,
+        ], $options);
+
         if(!$this->cache) {
             $this->cache = new Cache(
-                $refreshTtl, $ttl, $allowNull, $driver, 'db:'
+                $options['refresh_ttl'],
+                $options['ttl'],
+                $options['allow_null'],
+                $options['driver'],
+                'db:'
             );
         } else {
-            $this->cache = $this->cache->next($refreshTtl, $ttl, $allowNull, $driver);
+            $this->cache = $this->cache->next(
+                $options['refresh_ttl'],
+                $options['ttl'],
+                $options['allow_null'],
+                $options['driver']
+            );
         }
 
         return $this;
-    }
-
-    /**
-     * @param int|null $refreshTtl
-     * @param \DateTimeInterface|\DateInterval|int|null $ttl
-     * @param bool $allowNull
-     * @return static
-     */
-    public function cacheFromArray($refreshTtl = null, $ttl = null, $allowNull = false)
-    {
-        return $this->cache($refreshTtl, $ttl, $allowNull, 'array');
-    }
-
-    /**
-     * @param int|null $refreshTtl
-     * @param \DateTimeInterface|\DateInterval|int|null $ttl
-     * @param bool $allowNull
-     * @return static
-     */
-    public function cacheFromFile($refreshTtl = null, $ttl = null, $allowNull = false)
-    {
-        return $this->cache($refreshTtl, $ttl, $allowNull, 'file');
     }
 
     /**
