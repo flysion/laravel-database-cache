@@ -77,6 +77,7 @@ class Cache
 
         $this->next = $instance;
         $instance->prev = $this;
+
         return $instance;
     }
 
