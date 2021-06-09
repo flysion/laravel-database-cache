@@ -170,12 +170,13 @@ class Cache
         try {
             $data = $callback();
         } catch (\Exception $e) {
-            if($exists) {
-                report($e);
-                return $data; // 数据还可以用，刷新失败接着用
+            if(!$exists) {
+                throw $e;
             }
 
-            throw $e;
+            report($e);
+
+            return $data; // 数据还可以用，刷新失败接着用
         }
 
         $cache->put($key, $data);
