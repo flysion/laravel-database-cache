@@ -159,7 +159,7 @@ class Cache
 
             // 数据还可以用，但是需要刷新
 
-            if($this->refreshTtl && $ts + $this->refreshTtl < time()) {
+            if(!is_null($this->refreshTtl) && $ts + $this->refreshTtl < time()) {
                 break;
             }
 
